@@ -1,0 +1,5 @@
+FROM registry.ctfy.io/687ab0c2-68a7-4474-8198-9d76d2b9f123/ctf-agent:v1
+
+COPY src/skills/ /skills/
+LABEL org.opencontainers.image.version="v2-skills" \
+      io.ctf-agent.base-image-id="sha256:257319054beff29ec72890d5bcc3d9cb0a62b88a3358a8a908309b36f5871e5c"

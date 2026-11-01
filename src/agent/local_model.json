@@ -1,0 +1,10 @@
+{
+  "model": "CTFy platform model",
+  "alias": "ctf-agent-model",
+  "threads": 8,
+  "context": 32768,
+  "runtime_tag": "ctfy-env",
+  "model_sha256": "",
+  "source": "CTFy runtime environment",
+  "model_revision": ""
+}

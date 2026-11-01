@@ -1,0 +1,9 @@
+.git/
+**/.git/
+**/__pycache__/
+**/*.py[cod]
+**/logs/
+**/cases/
+**/output/
+.DS_Store
+Thumbs.db
