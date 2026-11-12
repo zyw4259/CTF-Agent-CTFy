@@ -1,9 +1,11 @@
 """Small allowlisted adapters for installed, non-interactive CTF utilities."""
+import shutil
 import subprocess
 import sys
 import uuid
 import re
 import importlib.util
+from pathlib import Path
 from attachment_tools import BASE
 
 TOOLS_ROOT = BASE.parent.parent.parent
@@ -21,12 +23,32 @@ if (PORTABLE_TOOLS/'tesseract'/'tesseract.exe').is_file():TESSERACT=PORTABLE_TOO
 if (PORTABLE_TOOLS/'pyzbar').is_dir():PYZBAR_PACKAGE=PORTABLE_TOOLS/'pyzbar'
 
 
+def _tesseract_bin():
+    if TESSERACT.is_file():
+        return TESSERACT
+    found=shutil.which('tesseract')
+    return Path(found) if found else None
+
+
+def _binwalk_bin():
+    found=shutil.which('binwalk')
+    if found:
+        return Path(found)
+    return BINWALK if BINWALK.is_file() else None
+
+
+def _qr_package():
+    bundled=(PYZBAR_PACKAGE/'pyzbar.py').is_file() and (PYZBAR_PACKAGE/'libzbar-64.dll').is_file()
+    return bundled or importlib.util.find_spec('pyzbar') is not None
+
+
 def status():
     import umi_ocr
     umi=umi_ocr.status()['available']
-    return {'binwalk': BINWALK.is_file(), 'stegoveritas': STEGOVERITAS.is_file(),
-            'yafu':YAFU.is_file(),'lll':bool(importlib.util.find_spec('flint')),'umi_ocr':umi,'image_ocr':(umi or TESSERACT.is_file()) and bool(importlib.util.find_spec('PIL')),
-            'image_qr':(PYZBAR_PACKAGE/'pyzbar.py').is_file() and (PYZBAR_PACKAGE/'libzbar-64.dll').is_file()}
+    tesseract=_tesseract_bin()
+    return {'binwalk': _binwalk_bin() is not None, 'foremost': shutil.which('foremost') is not None, 'stegoveritas': STEGOVERITAS.is_file(),
+            'yafu':YAFU.is_file(),'lll':bool(importlib.util.find_spec('flint')),'umi_ocr':umi,'image_ocr':(umi or tesseract is not None) and bool(importlib.util.find_spec('PIL')),
+            'image_qr':_qr_package()}
 
 
 def factor_integer(case_id,value):
@@ -76,7 +98,8 @@ def _tesseract_ocr(case_id,file,args):
     from attachment_tools import case_dir,resolve_file
     from PIL import Image,ImageOps
     source=resolve_file(case_id,file)
-    if not TESSERACT.is_file():raise ValueError('未找到本机Tesseract')
+    tesseract=_tesseract_bin()
+    if tesseract is None:raise ValueError('未找到本机Tesseract')
     with Image.open(source) as image:
         if image.width*image.height>20_000_000:raise ValueError('OCR图像像素上限2000万')
         rgb=image.convert('RGB')
@@ -94,8 +117,10 @@ def _tesseract_ocr(case_id,file,args):
             if variant.width*variant.height<=2_000_000:
                 variant=variant.resize((variant.width*2,variant.height*2))
             variant.save(target)
-        result=subprocess.run([str(TESSERACT),str(target),'stdout','--tessdata-dir',str(TESSERACT.parent/'tessdata'),
-            '-l','eng','--psm',str(mode)],cwd=root,stdin=subprocess.DEVNULL,capture_output=True,
+        command=[str(tesseract),str(target),'stdout','-l','eng','--psm',str(mode)]
+        tessdata=tesseract.parent/'tessdata'
+        if tessdata.is_dir():command[3:3]=['--tessdata-dir',str(tessdata)]
+        result=subprocess.run(command,cwd=root,stdin=subprocess.DEVNULL,capture_output=True,
             timeout=30,shell=False,creationflags=subprocess.CREATE_NO_WINDOW if sys.platform=='win32' else 0)
         text=result.stdout[:12000].decode('utf-8',errors='replace')
         results.append({'variant':label,'file':target.relative_to(root).as_posix(),'exit_code':result.returncode,
@@ -111,13 +136,17 @@ def image_qr(case_id,file):
     from PIL import Image,ImageOps,ImageFilter
     from attachment_tools import resolve_file,case_dir
     if not status()['image_qr']:raise ValueError('未找到本机QR解码库')
-    name='_ctf_pyzbar'
-    if name not in sys.modules:
-        spec=importlib.util.spec_from_file_location(name,PYZBAR_PACKAGE/'__init__.py',submodule_search_locations=[str(PYZBAR_PACKAGE)])
-        package=importlib.util.module_from_spec(spec)
-        sys.modules[name]=package
-        spec.loader.exec_module(package)
-    decode=importlib.import_module(name+'.pyzbar').decode
+    bundled=(PYZBAR_PACKAGE/'pyzbar.py').is_file() and (PYZBAR_PACKAGE/'libzbar-64.dll').is_file()
+    if bundled:
+        name='_ctf_pyzbar'
+        if name not in sys.modules:
+            spec=importlib.util.spec_from_file_location(name,PYZBAR_PACKAGE/'__init__.py',submodule_search_locations=[str(PYZBAR_PACKAGE)])
+            package=importlib.util.module_from_spec(spec)
+            sys.modules[name]=package
+            spec.loader.exec_module(package)
+        decode=importlib.import_module(name+'.pyzbar').decode
+    else:
+        from pyzbar.pyzbar import decode
     with Image.open(resolve_file(case_id,file)) as image:
         if image.width*image.height>64_000_000:raise ValueError('QR图像像素上限6400万')
         gray=image.convert('L')
@@ -144,7 +173,9 @@ def binwalk(case_id, file):
     source = resolve_file(case_id, file)
     root = case_dir(case_id)
     log_path = root / 'output' / f'binwalk-{uuid.uuid4().hex[:8]}.log'
-    command = [str(BINWALK), '-B', str(source)]
+    binary=_binwalk_bin()
+    if binary is None:raise ValueError('未找到本机 Binwalk')
+    command = [str(binary), '-B', str(source)]
     try:
         with log_path.open('wb') as log:
             process = subprocess.Popen(command, cwd=root, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
@@ -158,6 +189,41 @@ def binwalk(case_id, file):
     except OSError as exc:
         raise ValueError(f'Binwalk 启动失败：{exc}') from exc
     return {'exit_code': process.returncode, 'timeout': False, 'output': _tail(log_path)}
+
+
+def foremost(case_id, file):
+    from attachment_tools import case_dir, resolve_file
+    binary=shutil.which('foremost')
+    if not binary:
+        raise ValueError('未找到 foremost')
+    source=resolve_file(case_id, file)
+    if source.stat().st_size>256*1024*1024:
+        raise ValueError('foremost 只处理 256MB 以内的附件')
+    root=case_dir(case_id)
+    out=root/'output'/f'foremost-{uuid.uuid4().hex[:8]}'
+    out.mkdir()
+    log_path=out/'foremost.log'
+    command=[binary,'-q','-i',str(source),'-o',str(out)]
+    try:
+        with log_path.open('wb') as log:
+            process=subprocess.Popen(command,cwd=root,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,
+                                     shell=False,creationflags=subprocess.CREATE_NO_WINDOW if sys.platform=='win32' else 0)
+            try:
+                process.wait(timeout=45)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                return {'exit_code':process.returncode,'timeout':True,'output':_tail(log_path),'directory':out.relative_to(root).as_posix()}
+    except OSError as exc:
+        raise ValueError(f'foremost 启动失败：{exc}') from exc
+    files=[]
+    for path in sorted(out.rglob('*')):
+        if not path.is_file() or path==log_path:
+            continue
+        files.append({'file':path.relative_to(root).as_posix(),'bytes':path.stat().st_size})
+        if len(files)>=40:
+            break
+    return {'exit_code':process.returncode,'timeout':False,'output':_tail(log_path),'directory':out.relative_to(root).as_posix(),'files':files}
 
 
 def stegoveritas(case_id, file):

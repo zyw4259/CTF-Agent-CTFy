@@ -674,11 +674,32 @@ def execute(case_id,action,file='',args=None,allow_execution=False,allow_symbol_
         if not ctf_tools.status().get('binwalk'):
             raise ValueError('未找到本机 Binwalk')
         return ctf_tools.binwalk(case_id,file)
+    if action=='foremost':
+        import ctf_tools
+        if not ctf_tools.status().get('foremost'):
+            raise ValueError('未找到 foremost')
+        return ctf_tools.foremost(case_id,file)
     if action=='stegoveritas':
         import ctf_tools
         if not ctf_tools.status().get('stegoveritas'):
             raise ValueError('未找到随波逐流 CTF 编码工具')
         return ctf_tools.stegoveritas(case_id,file)
+    if action == 'tcp_exchange':
+        import web_tools
+        return web_tools.tcp_exchange(args)
+    if action == 'own_ssh':
+        import local_binary
+        return local_binary.own_ssh((args or {}).get('command', ''))
+    if action in {'local_checksec', 'local_objdump', 'local_r2', 'local_gdb'}:
+        import local_binary
+        path = resolve_file(case_id, file)
+        if action == 'local_checksec':
+            return local_binary.checksec(path)
+        if action == 'local_objdump':
+            return local_binary.objdump(path, args)
+        if action == 'local_r2':
+            return local_binary.radare(path)
+        return local_binary.gdb_run(path, args)
     if action in {'web_request','web_discover','sqlmap'}:
         if not target_url:
             raise ValueError('Web 工具需要用户提供靶场地址')

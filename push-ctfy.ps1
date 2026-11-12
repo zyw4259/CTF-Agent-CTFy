@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
-$image = 'ctf-agent-ctfy:v2-skills'
-$reference = 'registry.ctfy.io/687ab0c2-68a7-4474-8198-9d76d2b9f123/ctf-agent:v2-skills'
+$image = 'ctf-agent-ctfy:v3'
+$reference = 'registry.ctfy.io/687ab0c2-68a7-4474-8198-9d76d2b9f123/ctf-agent:v3'
 $secureToken = Read-Host 'Enter the CTFy token (input is hidden)' -AsSecureString
 $pointer = [IntPtr]::Zero
 $token = $null

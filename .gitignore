@@ -1,18 +1,12 @@
-.DS_Store
-Thumbs.db
 __pycache__/
 *.py[cod]
-*.log
-node_modules/
-
-# Generated knowledge-base index
-src/agent/index.sqlite3
-
-# Local runtime data
-src/agent/cases/
-src/agent/logs/
-
-# Packaged images and release archives
+logs/
+cases/
+output/
 dist/
-*.tar
-*.zip
+node_modules/
+src/agent/index.sqlite3
+.env
+.env.*
+.DS_Store
+Thumbs.db

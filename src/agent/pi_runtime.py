@@ -92,7 +92,8 @@ class Session:
                 instruction=instruction[:start]+'Call the ctf_action tool with exactly one action.'+instruction[end+2:]
         instruction=instruction.replace('Keep the response minimal: one JSON object,','Keep the ctf_action arguments minimal:')
         instruction+='\nUse native ctf_action tool calls, never print action JSON as text. To finish, call ctf_action with action=finish and an answer string. The host supplies actual_results and current_context after each call. Only actual_results are execution evidence; retrieved WP/skills are references. Do not repeat a completed action. Reason <=80 Chinese characters.'
-        config={'instruction':instruction,'actions':actions,'max_tokens':max(1200,max_tokens)}
+        floor=800 if os.environ.get('CTFY_TOKEN') else 1200
+        config={'instruction':instruction,'actions':actions,'max_tokens':max(floor,max_tokens)}
         if self.process is None:
             if not status()['ready']:raise RuntimeError('Pi 运行时缺失，请完整复制 runtime/pi 目录')
             model=json.loads((BASE/'local_model.json').read_text(encoding='utf-8'))

@@ -22,6 +22,14 @@ math_mode=mode in {'--math-sandbox','--sage-sandbox','--analysis-sandbox'}
 if math_mode and (sys.platform!='linux' or root!=Path('/tmp') or not script.is_relative_to(root/'output')):
     raise ValueError('数学库仅允许在Linux隔离数学环境内启用')
 allowed={'base64','binascii','struct','zlib','hashlib','math','itertools','collections','re','json','string','functools','operator','statistics','decimal','fractions','codecs'}
+venv_site=Path(sys.prefix)/'lib'/f'python{sys.version_info.major}.{sys.version_info.minor}'/'site-packages'
+if venv_site.is_dir() and str(venv_site) not in sys.path:
+    sys.path.append(str(venv_site))
+heavy=set()
+for name in ('Crypto','gmpy2','z3'):
+    if (venv_site/name).is_dir():
+        allowed.add(name)
+        heavy.add(name)
 if math_mode:
     allowed.update({'sympy','z3','Crypto','gmpy2','fpylll','py_ecc','cysignals','numpy','scipy'})
 if mode=='--sage-sandbox':allowed.add('sage')
@@ -53,10 +61,15 @@ if math_mode:
         importlib.import_module('fpylll')
     modules={name:__import__(name) for name in allowed if name in sys.modules or name in {n.split('.')[0] for n in requested}}
 else:
-    modules={name:__import__(name) for name in allowed}
+    requested=set()
+    for node in ast.walk(tree):
+        if isinstance(node,ast.Import):requested.update(alias.name.split('.')[0] for alias in node.names)
+        elif isinstance(node,ast.ImportFrom) and node.module:requested.add(node.module.split('.')[0])
+    modules={name:__import__(name) for name in allowed if name not in heavy or name in requested}
 
 def library_path(target):
-    return math_mode and any(target.is_relative_to(Path(prefix)) for prefix in ('/usr','/opt','/lib','/lib64'))
+    prefixes=('/usr','/opt','/lib','/lib64') if math_mode else ('/opt/venv','/usr/lib','/lib','/lib64')
+    return any(target.is_relative_to(Path(prefix)) for prefix in prefixes)
 
 def audit(event,args):
     if event=='open':

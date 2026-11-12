@@ -14,10 +14,13 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 
 RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
     && apt-get update && apt-get install -y --no-install-recommends \
-    binutils file tshark tesseract-ocr libzbar0
+    binutils binwalk ca-certificates curl file foremost gdb libgmp10 openssh-client sshpass strace tshark tesseract-ocr libzbar0
 
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:${PATH}"
+RUN python3 -m venv /opt/venv \
+    && groupadd --gid 1000 ctfy \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin ctfy
+ENV PATH="/opt/venv/bin:${PATH}" \
+    HOME=/home/ctfy
 
 WORKDIR /app
 COPY requirements.txt /app/requirements.txt
@@ -29,5 +32,8 @@ RUN cd /app/runtime/pi && npm ci --omit=dev --no-audit --no-fund
 COPY src/skills/ /skills/
 COPY knowledge-base/ /knowledge-base/
 COPY ctfy_entrypoint.py /app/ctfy_entrypoint.py
+RUN mkdir -p /app/cases /app/logs \
+    && chown -R ctfy:ctfy /app /home/ctfy
 
+USER 1000
 ENTRYPOINT ["python3", "/app/ctfy_entrypoint.py"]

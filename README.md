@@ -4,9 +4,11 @@
 
 ## 当前支持
 
-- `qa`：结合 Agent 内置知识库回答题目。
-- `instance`：使用 CTFy MCP 工具获取题目信息/靶场，再调用现有附件分析器；只把证据支持的答案写入结果。
-- `defence`、`awd`、`engagement`：尚未实现，会返回明确的 `unsupported_run_mode`。
+- `qa`：结合 Agent 内置知识库回答题目。平台令牌可用时当场提交到 `/api/v1/qa/submissions`；提交没有被接受时，答案留在 `result.json` 里由平台代交。
+- `instance`：读取平台已经启动的靶机（`target_endpoints`、`CTFY_TARGET_URL`）和 `/ctfy/work/attachments/`，不再调用 `POST /api/v1/instances`。HTTP 靶机开启同源网页访问。步数跟随 `max_turns`，上限 40。答对后如果还有 `gated_questions`，会重新读取题目再继续。
+- `engagement`：按题目给出的 scope 访问已经启动的靶场，并把做过的请求和实际看到的结果写成报告，提交到平台的 engagement report。
+- `defence`：读取题目给出的服务源码，把模型给出的修正文件提交到 `POST /api/v1/patches`。接口返回已受理就停止，不重复提交。
+- `awd`：比赛结束前保持运行。每轮读取公布的靶机，只把对手响应里实际出现的 flag 提交到 AWD 接口，并用本队 SSH 凭据在自己的机器上执行一条命令。
 - 不包含 Windows 本地模型；CTFy 运行时必须在平台中配置可用的模型提供商和额度/密钥。密钥由平台注入容器，不要写进镜像或本项目文件。
 - `v2-skills`：内置 `solve-challenge` 和 10 套 `ctf-*` Skills 及参考文件，安装在容器 `/skills/`；现有技能发现、检索和分页读取接口可直接读取。
 
@@ -31,7 +33,7 @@ docker build -t <镜像仓库>/<命名空间>/ctf-agent-ctfy:1.0 .
 docker push <镜像仓库>/<命名空间>/ctf-agent-ctfy:1.0
 ```
 
-然后在 CTFy Agent 页面填写推送后的镜像地址，并在平台设置模型提供商、模型 ID 和密钥/额度。镜像按 CTFY-0001 schema v2 启动，从 `$CTFY_WORK_DIR` 读取 `task.json`、`README.md`，并原子写入 `result.json`。`CTFY_EVAL_DRY_RUN=1` 时只写入 dry-run 结果，不请求模型。
+然后在 CTFy Agent 页面填写推送后的镜像地址，并在平台设置模型提供商、模型 ID 和密钥/额度。镜像按 CTFY-0001 schema v2 和 v3 启动，从 `$CTFY_WORK_DIR` 读取 `task.json`、`README.md`，并原子写入 `result.json`。`CTFY_EVAL_DRY_RUN=1` 时只写入 dry-run 结果，不请求模型。
 
 ## 本地快速构建
 
@@ -57,5 +59,5 @@ docker build -t ctf-agent-ctfy:local .
 - `knowledge-base/公众号文章writeup/`：随镜像携带并与索引匹配的 299 篇 PDF。
 - `Dockerfile`：构建 Linux 容器镜像。
 
-提示：当前适配没有接入动态 GDB、angr、pwntools，也不会执行上传的二进制文件；逆向/PWN 动态题和需要这些工具的题目可能无法完成。
+提示：Web、密码、逆向、Pwn、杂项、编码、图片、压缩包、流量取证和模型附件会各自只用一小套工具。比赛运行时不再每一步检索 writeup。容器里有 gdb、readelf、objdump、capstone、tshark、binwalk、foremost、tesseract、二维码解码、PyCryptodome、gmpy2 和 z3。Debian 这版源里没有 radare2，也没有 angr、pwntools 或 PyTorch。
 

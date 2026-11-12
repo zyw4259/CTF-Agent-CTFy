@@ -79,12 +79,13 @@ async function initializeCtfyTools() {
   await rpc('notifications/initialized', {}, true);
   const listed = await rpc('tools/list');
   ctfyRpc = rpc;
-  ctfyTools = (listed.tools || []).filter(item => item && typeof item.name === 'string' && item.inputSchema)
+  const instanceMutation = /^(start|create|stop|reset|delete|destroy)_instance$/;
+  ctfyTools = (listed.tools || []).filter(item => item && typeof item.name === 'string' && item.inputSchema && !instanceMutation.test(item.name))
     .map(item => {
       const name = `ctfy_${item.name.replace(/[^a-zA-Z0-9_-]/g, '_')}`;
       return {
         name, label: 'CTFy platform',
-        description: `CTFy platform tool ${item.name}. ${String(item.description || '').slice(0, 1200)}`,
+        description: `CTFy ${item.name}. ${String(item.description || '').slice(0, 180)}`,
         parameters: item.inputSchema,
         execute: async (_id, args) => {
           const result = await ctfyRpc('tools/call', { name: item.name, arguments: args });
@@ -214,7 +215,14 @@ async function prompt(message) {
 
 async function start(value) {
   config = value;
-  if (process.env.LLM_FLAVOR && process.env.CTFY_TOKEN) await initializeCtfyTools();
+  if (process.env.LLM_FLAVOR && process.env.CTFY_TOKEN) {
+    try {
+      await initializeCtfyTools();
+    } catch (error) {
+      ctfyTools = [];
+      await send({ type: 'event', event: 'ctfy_tools_unavailable', error: String(error).slice(0, 500) });
+    }
+  }
   const configured = modelConfiguration();
   agent = new Agent({
     initialState: { model: configured.model, thinkingLevel: 'off', systemPrompt: config.instruction, tools: tools() },
@@ -234,7 +242,9 @@ async function start(value) {
         payload.tool_choice = { type: 'any' };
       } else {
         payload.parallel_tool_calls = false;
-        payload.tool_choice = 'required';
+        payload.thinking = { type: 'disabled' };
+        payload.chat_template_kwargs = { enable_thinking: false };
+        payload.tool_choice = 'auto';
       }
     }
   });

@@ -83,7 +83,7 @@ def choose(question,files,steps=(),target_url='',requested='auto',source_text=''
         for key,pattern in RULES.items():
             if re.search(pattern,text,re.I|re.ASCII):add(key,weight,reason)
     keywords(question[:1000],8,'题目描述')
-    for key,pattern in [('crypto',r'密码学|\bcrypto(?:graphy)?\b'),('reverse',r'逆向|\breverse(?: engineering)?\b'),('misc',r'\bmisc\b|杂项'),('web',r'\bweb\b')]:
+    for key,pattern in [('crypto',r'密码学|\bcrypto(?:graphy)?\b'),('reverse',r'逆向|\breverse(?: engineering)?\b'),('misc',r'\bmisc\b|杂项'),('web',r'\bweb\b'),('pwn',r'\bpwn\b|栈溢出|堆溢出'),('forensics',r'取证|\bforensics?\b'),('ai_ml',r'机器学习|模型安全|提示注入|\bai[-_ ]?security\b')]:
         if re.search(pattern,question[:1000],re.I|re.ASCII):add(key,20,'题目显式分类')
     keywords(source_text[:12000],4,'附件内容')
     expanded={s.get('file') for s in steps if s.get('action')=='extract_zip' and isinstance(s.get('result'),dict) and s['result'].get('directory')}

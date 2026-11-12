@@ -1,3 +1,9 @@
 python-flint==0.9.0
 Pillow>=10.0,<13
 pyzbar==0.1.9
+pycryptodome>=3.20,<4
+gmpy2>=2.2,<3
+z3-solver>=4.13,<5
+capstone>=5,<6
+pyelftools>=0.31
+pefile>=2023.2.7

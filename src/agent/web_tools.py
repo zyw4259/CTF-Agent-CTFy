@@ -1,7 +1,11 @@
 """Origin-scoped HTTP and installed CTF web-tool adapters."""
 import http.cookiejar
+import ipaddress
 import json
+import os
 import re
+import socket
+import ssl
 import subprocess
 import sys
 import urllib.error
@@ -78,10 +82,33 @@ def normalize_target(url):
     return urllib.parse.urlunsplit((parsed.scheme.lower(), netloc, parsed.path or '/', parsed.query, ''))
 
 
+def _scope_allows(hostname):
+    raw = os.environ.get('CTFY_SCOPE_HOSTS', '')
+    host = str(hostname or '').lower().rstrip('.')
+    if not raw or not host:
+        return False
+    for item in raw.split(','):
+        item = item.strip().lower()
+        if not item:
+            continue
+        if '://' in item:
+            item = urllib.parse.urlsplit(item).hostname or ''
+        if '/' in item:
+            try:
+                if ipaddress.ip_address(host) in ipaddress.ip_network(item, strict=False):
+                    return True
+            except ValueError:
+                continue
+            continue
+        if host == item.split(':')[0]:
+            return True
+    return False
+
+
 def _same_origin(target, candidate):
     _, expected = _parts(target)
     _, actual = _parts(candidate)
-    return expected == actual
+    return expected == actual or _scope_allows(actual[1])
 
 
 def _target_url(target, args):
@@ -109,6 +136,66 @@ def _add_params(url, params):
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+def allowed_tcp_endpoints():
+    allowed = {}
+    for item in os.environ.get('CTFY_TCP_ENDPOINTS', '').split(','):
+        parts = [part.strip() for part in item.split(':') if part.strip()]
+        if len(parts) < 2:
+            continue
+        try:
+            port = int(parts[1])
+        except ValueError:
+            continue
+        if not 1 <= port <= 65535:
+            continue
+        allowed[(parts[0].lower(), port)] = len(parts) > 2 and parts[2] == 'tls'
+    return allowed
+
+
+def tcp_exchange(args):
+    allowed = allowed_tcp_endpoints()
+    host = str((args or {}).get('host') or '').strip().lower().rstrip('.')
+    try:
+        port = int((args or {}).get('port') or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('TCP 端口无效') from exc
+    if (host, port) not in allowed:
+        raise ValueError('只允许连接任务公布的 TCP 地址')
+    data = str((args or {}).get('data') or '')
+    if len(data.encode('utf-8')) > 512:
+        raise ValueError('发送内容最多512字节')
+    use_tls = bool((args or {}).get('tls')) or allowed[(host, port)]
+    raw = socket.create_connection((host, port), timeout=8)
+    try:
+        if use_tls:
+            raw = ssl.create_default_context().wrap_socket(raw, server_hostname=host)
+        raw.settimeout(3)
+
+        def read_some():
+            chunks = []
+            total = 0
+            try:
+                while total < 8192:
+                    part = raw.recv(4096)
+                    if not part:
+                        break
+                    chunks.append(part)
+                    total += len(part)
+            except socket.timeout:
+                pass
+            return b''.join(chunks)
+
+        banner = read_some()
+        sent = data.encode('utf-8')
+        if sent:
+            raw.sendall(sent)
+        reply = read_some()
+    finally:
+        raw.close()
+    body = (banner + reply).decode('utf-8', 'replace')[:8000]
+    return {'host': host, 'port': port, 'tls': use_tls, 'sent': data, 'body': body}
 
 
 def request(case_id, target, args):
