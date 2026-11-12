@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "received_date": "2026-11-12",
+  "baseline_commit": "a995cc6bad1e5de5eb3963085dce1453c2a7efd9",
+  "bundled_delivery_commit": "66c9e32bae28bf78389d18b12b5162ff12864e8c",
+  "import_commit": "98e7c4c934e9f86d3ca1a9cff3c01d29ccfb1c7f",
+  "branch": "vendor/v3-20261112",
+  "files": [
+    {
+      "path": ".dockerignore",
+      "status": "modified",
+      "old_sha256": "16c8dbe550ee9a958daf360e65306b2ea9e263d6e6e1ab425d1ab6258f130f43",
+      "new_sha256": "18b9706495bd983ec39e72df717c14d3d4f2695756f255df0789644431b9bba6"
+    },
+    {
+      "path": ".gitignore",
+      "status": "modified",
+      "old_sha256": "bfdd1f51e569978622b0e1de569a811c29a681b0bdac1ea0d6b3b2122861910d",
+      "new_sha256": "d7f3dcf151e938c1c1be254443e5151253d477c2aa30fbfa3471c992bcbed0b3"
+    },
+    {
+      "path": "Dockerfile",
+      "status": "modified",
+      "old_sha256": "b9caaba1fef23f9d2567eb4d39b0e5da29255f967fbb81cb00d7770471f19684",
+      "new_sha256": "7abaa9a1b8cab31b4e2b405d7555dc775a299b09934ec5ed33f6beb197032432"
+    },
+    {
+      "path": "README.md",
+      "status": "modified",
+      "old_sha256": "cb4da575b902a21cbda64aca80cf68eea0043d817f05a475fc5c9d06aeb84188",
+      "new_sha256": "276222f0e33a11fd956bdbd13510161541678ef6035593531c9c311762dc91d4"
+    },
+    {
+      "path": "ctfy_entrypoint.py",
+      "status": "modified",
+      "old_sha256": "89462929d6e63cdee7621a2d42ccb6c5693d45b0a074e4c45e0e0ddb43043506",
+      "new_sha256": "5df953329313708c4e3ac2bf86b7b4d5104be9493a98c5394a61b22273d7d399"
+    },
+    {
+      "path": "push-ctfy.ps1",
+      "status": "modified",
+      "old_sha256": "a6a46650509ec41b0ea87372ea213d9e9e1a9c8fc0fc2b2f0dc80820c959e88b",
+      "new_sha256": "c1c7303d300d2214b42c472ded071404e854965f4f6faea62cba2be5a901c44b"
+    },
+    {
+      "path": "requirements.txt",
+      "status": "modified",
+      "old_sha256": "a0c2b718f733a310d595338716af2d1a81914d3a3889bc3cd83bd360daf66cef",
+      "new_sha256": "cffe2762535ec1a017698b8c1a3bb08bb9504dbcba79b1446cb87de958b52ae6"
+    },
+    {
+      "path": "src/agent/attachment_agent.py",
+      "status": "modified",
+      "old_sha256": "9dbafe2414c1ba9af7ef93bb8ca2f7f94ba6f414612afc556cb881cd5dae7f0a",
+      "new_sha256": "48b4c4e73aa7d76a0485319342561ee747ee28b671c7fd9cdd93b7316797b2ce"
+    },
+    {
+      "path": "src/agent/attachment_tools.py",
+      "status": "modified",
+      "old_sha256": "53a8233913da8cbf92c6cd993213cbbecc5f1859416005140aed868c5be714d1",
+      "new_sha256": "30499a83172274b2a9145ce38f92c69916bb564949bd360a9a9ebe1208c95cb4"
+    },
+    {
+      "path": "src/agent/ctf_tools.py",
+      "status": "modified",
+      "old_sha256": "338121a4077628bdb779660098f57cd2f7674fdc16aebefbc9c0f8a3596d1318",
+      "new_sha256": "99546019935261d2114e1e897ab08d394ae6c02e0693e95ad91c738d24120156"
+    },
+    {
+      "path": "src/agent/local_binary.py",
+      "status": "added",
+      "old_sha256": null,
+      "new_sha256": "7acf8b328f5124c01aa13e132d418bfb8447f583ea489c5a85c58cd694cd31f6"
+    },
+    {
+      "path": "src/agent/pi_runtime.py",
+      "status": "modified",
+      "old_sha256": "e363d11f2d811620a2588aa3623e5da042cf1fc5b99056c135f0cc6a0edf58cc",
+      "new_sha256": "50012113a18051c34f0d820e006d9d15858befac17f607f38c0efca86efc5855"
+    },
+    {
+      "path": "src/agent/prompt_presets.py",
+      "status": "modified",
+      "old_sha256": "2485894c4f81a3d5703025e69e52d8a75c70b90608be75e6a98231bff6ce80ae",
+      "new_sha256": "c2737a72552f3b1a8b476ff4128b4bbc35991efa7eb36723b3da9660697f7739"
+    },
+    {
+      "path": "src/agent/python_worker.py",
+      "status": "modified",
+      "old_sha256": "b87433da0fdfefe306faf93d64deacfebac9adf00b8cf5ebc4b3fc190dfe5ae2",
+      "new_sha256": "e1bfcbdef10250dc36a704e3d421f86fd28866bea7991d02a61d0b21cc6304e8"
+    },
+    {
+      "path": "src/agent/web_tools.py",
+      "status": "modified",
+      "old_sha256": "344be483ac024111142d306a4e33a343b10efe5e66a0b8bee2d3fbd9390ec9b3",
+      "new_sha256": "171b20a603473a9215bc00dbadce0cad832aeef5be1d86d0a8fedb0c88097f37"
+    },
+    {
+      "path": "src/runtime/pi/runner.mjs",
+      "status": "modified",
+      "old_sha256": "13cfbff35f60b1115a78e5280f8bb0596b389be3e9b6c1e97186d877b6be53b9",
+      "new_sha256": "af1124a2ab1f6f141d0966e7c8e0f83c2f67a0126e7bc85e0fc66a53c1447040"
+    }
+  ],
+  "uncommitted_substantive_files": [
+    "Dockerfile",
+    "README.md",
+    "requirements.txt",
+    "src/agent/attachment_agent.py",
+    "src/agent/attachment_tools.py",
+    "src/agent/ctf_tools.py",
+    "src/agent/python_worker.py"
+  ],
+  "archive": {
+    "file": "ctf-agent-ctfy-v3.tar",
+    "bytes": 1509149696,
+    "sha256": "d6e077b16a865d86a98ebfbc8b70e003ffdaa16a92c78a58d3d4ca52adc2c3cc",
+    "matches_delivered_source": false,
+    "source_mismatches": [
+      "src/agent/attachment_agent.py",
+      "src/agent/attachment_tools.py",
+      "src/agent/ctf_tools.py",
+      "src/agent/python_worker.py",
+      "requirements.txt"
+    ]
+  }
+}
