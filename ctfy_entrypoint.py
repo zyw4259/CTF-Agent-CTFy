@@ -370,27 +370,66 @@ def submit_answer(task, question_id, answer):
 def refresh_task(task):
     challenge = task.get('challenge') if isinstance(task.get('challenge'), dict) else {}
     challenge_id = challenge.get('id') or os.environ.get('CTFY_EVAL_CHALLENGE_ID') or ''
-    if not challenge_id:
-        return task, False
     competition = task.get('competition_id') or os.environ.get('CTFY_EVAL_COMPETITION_ID') or ''
-    path = '/challenges/' + urllib.parse.quote(str(challenge_id), safe='')
-    if competition:
-        path += '?' + urllib.parse.urlencode({'competition_id': competition})
-    status, body = platform_request(task, 'GET', path)
-    if status != 200:
+    instance = str(task.get('target_instance') or os.environ.get('CTFY_EVAL_TARGET_INSTANCE') or '')
+    detail_questions = []
+    state_questions = []
+    source = {}
+    instance_body = {}
+    if challenge_id:
+        path = '/challenges/' + urllib.parse.quote(str(challenge_id), safe='')
+        if competition:
+            path += '?' + urllib.parse.urlencode({'competition_id': competition})
+        status, body = platform_request(task, 'GET', path)
+        if status == 200:
+            source = body.get('challenge') if isinstance(body.get('challenge'), dict) else body
+            if isinstance(source.get('questions'), list):
+                detail_questions = [item for item in source['questions'] if isinstance(item, dict)]
+    if instance:
+        query = '?' + urllib.parse.urlencode({'competition_id': competition}) if competition else ''
+        status, body = platform_request(task, 'GET', '/instances/' + urllib.parse.quote(instance, safe='') + query)
+        if status == 200 and isinstance(body, dict):
+            instance_body = body
+            if isinstance(body.get('questions'), list):
+                state_questions = [item for item in body['questions'] if isinstance(item, dict)]
+    if not detail_questions and not state_questions:
         return task, False
-    source = body.get('challenge') if isinstance(body.get('challenge'), dict) else body
-    questions = source.get('questions')
-    if not isinstance(questions, list):
-        return task, False
-    old_ids = {str(item.get('id')) for item in question_items(task) if item.get('id') is not None}
-    new_items = [item for item in questions if isinstance(item, dict)]
-    new_ids = {str(item.get('id')) for item in new_items if item.get('id') is not None}
+    old_items = [item for item in question_items(task) if item.get('id') is not None]
+    old_by_id = {str(item['id']): item for item in old_items}
+    merged = {}
+    order = []
+    for item in [*detail_questions, *state_questions]:
+        if item.get('id') is None:
+            continue
+        question_id = str(item['id'])
+        if question_id not in merged:
+            merged[question_id] = {}
+            order.append(question_id)
+        merged[question_id].update(item)
+    questions = [merged[question_id] for question_id in order]
+    newly_unlocked = [
+        question_id for question_id, item in merged.items()
+        if item.get('unlocked', True) and (
+            question_id not in old_by_id or old_by_id[question_id].get('unlocked') is False
+        )
+    ]
+    try:
+        old_gated = max(0, int(task.get('gated_questions') or 0))
+    except (TypeError, ValueError):
+        old_gated = 0
+    locked = sum(1 for item in questions if item.get('unlocked') is False)
+    reported = source.get('gated_questions', instance_body.get('gated_questions'))
+    try:
+        remaining_gated = max(0, int(reported)) if reported is not None else locked
+    except (TypeError, ValueError):
+        remaining_gated = locked
+    if remaining_gated == 0 and old_gated:
+        remaining_gated = max(0, old_gated - len(newly_unlocked))
     updated = dict(task)
-    updated['questions'] = new_items
-    if 'gated_questions' in source:
-        updated['gated_questions'] = source.get('gated_questions')
-    return updated, bool(new_ids - old_ids)
+    updated['questions'] = questions
+    updated['gated_questions'] = remaining_gated
+    changed = bool(newly_unlocked)
+    return updated, changed
 
 
 def handoff_answers(found, receipts):
@@ -476,7 +515,10 @@ def ctfy_prompt(task, note=''):
         lines.append(note)
     lines.append(f"CTFy run_mode: {task.get('run_mode', 'unknown')}")
     lines.append(f"Challenge: {challenge.get('name', '')}")
-    lines.append('The platform already started this target. Do not start, stop, or reset an instance.')
+    if task.get('run_mode') == 'instance':
+        lines.append('The platform already started this target. Do not start, stop, or reset an instance.')
+    elif task.get('run_mode') == 'qa':
+        lines.append('This is a QA submission. Inspect every provided attachment before answering.')
     engagement = task.get('run_mode') == 'engagement'
     if web and engagement:
         lines.append(f'The only host to request is the already-running target: {web}')
@@ -522,8 +564,12 @@ def answers_from_state(state, questions):
             for key, value in parsed.items():
                 if str(key) in valid_ids and isinstance(value, (str, int, float)) and str(value).strip():
                     found[str(key)] = str(value).strip()[:2000]
-    if len(questions) == 1 and state.get('flag_candidate'):
-        question_id = str(questions[0].get('id') or 'flag')
+    unfinished = [
+        item for item in questions
+        if item.get('unlocked', True) and not item.get('answered_correctly', False)
+    ]
+    if len(unfinished) == 1 and state.get('flag_candidate'):
+        question_id = str(unfinished[0].get('id') or 'flag')
         if question_id in valid_ids:
             found.setdefault(question_id, state['flag_candidate'])
     return found
@@ -542,16 +588,29 @@ def verified_submissions(state):
     return solved, attempted
 
 
-def run_instance_pass(task, readme, note, deadline):
+def run_instance_pass(task, readme, note, deadline, extra_files=None):
     import attachment_agent as agent
     import attachment_tools as tools
 
-    prompt, questions = ctfy_prompt(task, note)
     case_id = tools.new_case()
     root = tools.case_dir(case_id)
     (root / 'input' / 'ctfy-task.json').write_text(json.dumps(task, ensure_ascii=False, indent=2), encoding='utf-8')
     (root / 'input' / 'ctfy-briefing.md').write_text(readme[:MAX_INPUT], encoding='utf-8')
     copy_attachments(task, root)
+    if isinstance(extra_files, dict) and extra_files:
+        source_root = (root / 'input' / 'sources').resolve()
+        source_root.mkdir(parents=True, exist_ok=True)
+        for name, content in extra_files.items():
+            relative = Path(str(name).replace('\\', '/'))
+            if relative.is_absolute() or '..' in relative.parts or not isinstance(content, str):
+                continue
+            target = (source_root / relative).resolve()
+            if not target.is_relative_to(source_root):
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content, encoding='utf-8')
+        note += '\nCurrent challenge source files are under input/sources and must be read before producing the patch.'
+    prompt, questions = ctfy_prompt(task, note)
     _, web = published_targets(task)
     agent.start(case_id, prompt, allow_python=True, max_steps=step_budget(task), allow_wsl=False, allow_execution=False,
                 allow_symbol_download=False, target_url=web, allow_web_tools=bool(web),
@@ -569,10 +628,49 @@ def run_instance_pass(task, readme, note, deadline):
     return state, questions
 
 
+def solve_qa_with_attachments(task, readme, questions):
+    deadline = time.monotonic() + 3600
+    try:
+        state, _ = run_instance_pass(
+            task, readme,
+            'Attachment QA: inspect the provided files, answer from their actual contents, and submit only verified answers.',
+            deadline,
+        )
+    except Exception as error:
+        return base_result('agent_error', f'附件分析失败：{error}', task)
+    verified, attempted = verified_submissions(state)
+    answers = answers_from_state(state, questions)
+    receipts = {}
+    solved = set(verified)
+    for question_id, answer in answers.items():
+        if question_id in verified or question_id in attempted:
+            continue
+        receipt = submit_answer(task, question_id, answer)
+        receipt['answer'] = answer
+        receipts[question_id] = receipt
+        if receipt.get('correct'):
+            solved.add(question_id)
+    question_ids = {str(item.get('id')) for item in questions if item.get('id') is not None}
+    successful = question_ids.issubset(solved)
+    result = base_result('done' if successful else ('partial' if solved else 'no_verified_answer'),
+                         state.get('answer', ''), task)
+    result['answers'] = handoff_answers(answers, receipts)
+    result['solved'] = sorted(solved)
+    result['fully_solved'] = bool(question_ids) and successful
+    result['turns'] = int(state.get('pi_turn', 0) or 0)
+    result['tool_calls_made'] = len(state.get('steps', [])) + int(state.get('ctfy_tool_calls', 0) or 0)
+    usage = state.get('pi_total_usage') or {}
+    result['input_tokens'] = int(usage.get('input', 0) or 0)
+    result['output_tokens'] = int(usage.get('output', 0) or 0)
+    return result
+
+
 def solve_qa(task, readme):
     questions = question_items(task)
     if not questions:
         questions = [{'id': os.environ.get('CTFY_EVAL_CHALLENGE_ID', 'answer'), 'prompt': readme[:12000]}]
+    if attachment_files(task):
+        return solve_qa_with_attachments(task, readme, questions)
     query = json.dumps(questions, ensure_ascii=False)[:12000]
     excerpts = knowledge_excerpt(query)
     user = json.dumps({'run_mode': 'qa', 'questions': questions, 'briefing': readme[:24000],
@@ -615,7 +713,10 @@ def solve_qa(task, readme):
 def solve_instance(task, readme):
     expose_endpoints(task)
     deadline = time.monotonic() + 3600
-    solved = set()
+    solved = {
+        str(item['id']) for item in question_items(task)
+        if item.get('id') is not None and item.get('answered_correctly') is True
+    }
     receipts = {}
     found = {}
     rejected = []
@@ -655,6 +756,10 @@ def solve_instance(task, readme):
         if gated <= 0 or not solved:
             break
         task, unlocked = refresh_task(task)
+        solved.update(
+            str(item['id']) for item in question_items(task)
+            if item.get('id') is not None and item.get('answered_correctly') is True
+        )
         if not unlocked:
             break
         if round_index == 2:
@@ -811,7 +916,7 @@ def solve_defence(task, readme):
         note += '\nCurrent files: ' + ', '.join(list(source)[:12])
     deadline = time.monotonic() + 3600
     try:
-        state, _ = run_instance_pass(task, readme, note, deadline)
+        state, _ = run_instance_pass(task, readme, note, deadline, extra_files=source)
     except Exception as error:
         state = {'answer': f'分析未完成：{error}', 'status': 'error', 'steps': [], 'pi_turn': 0, 'pi_total_usage': {}}
     files = files_from_answer(state.get('answer'))
@@ -906,18 +1011,20 @@ def prepare_awd_targets(task, rows):
     return updated, hosts
 
 
-def flags_from_steps(steps, own_hosts):
+def flags_from_steps(steps, own_hosts, opponent_hosts=None):
     found = []
     pattern = re.compile(r'(?<![A-Za-z0-9_])([A-Za-z0-9][A-Za-z0-9_-]{1,31}\{[^ \n{}]{4,128}\})')
     own = {host.lower() for host in own_hosts if host}
+    allowed = {host.lower() for host in opponent_hosts or [] if host}
     for step in steps or []:
         if not isinstance(step, dict) or step.get('action') not in {'web_request', 'tcp_exchange'}:
             continue
         result = step.get('result') if isinstance(step.get('result'), dict) else {}
         host = host_of(result.get('url') or result.get('host'))
-        if host and host in own:
+        if not host or host in own or (allowed and host not in allowed):
             continue
-        for match in pattern.finditer(json.dumps(result, ensure_ascii=False)):
+        observed = '\n'.join(str(result.get(key) or '') for key in ('body', 'reply', 'response', 'text'))
+        for match in pattern.finditer(observed):
             found.append(match.group(1))
     return list(dict.fromkeys(found))
 
@@ -1008,7 +1115,7 @@ def solve_awd(task, readme):
             usage = state.get('pi_total_usage') or {}
             input_tokens += int(usage.get('input', 0) or 0)
             output_tokens += int(usage.get('output', 0) or 0)
-            fresh = [flag for flag in flags_from_steps(state.get('steps'), own_hosts) if flag not in submitted]
+            fresh = [flag for flag in flags_from_steps(state.get('steps'), own_hosts, hosts) if flag not in submitted]
             if fresh:
                 receipt = submit_awd_flags(task, fresh)
                 if receipt.get('accepted'):
@@ -1040,7 +1147,12 @@ def load_task():
 
 def main():
     if os.environ.get('CTFY_EVAL_DRY_RUN') == '1':
-        write_result(base_result('dry_run'))
+        task = None
+        try:
+            task, _ = load_task()
+        except Exception:
+            pass
+        write_result(base_result('dry_run', task=task))
         return 0
 
     try:

@@ -1,0 +1,46 @@
+# Incremental release build for TPCTF 2026.
+#
+# The base is the reviewed v3 image loaded from
+# CTF-Agent-CTFy-v3-20261110/ctf-agent-ctfy-v3.tar. The final image still
+# contains every base layer; this file only avoids rebuilding unchanged
+# toolchains when the corresponding public base-image downloads are slow.
+#
+# Build from a clean checkout of the release commit:
+#   docker build --platform linux/amd64 --pull=false \
+#     --build-arg SOURCE_COMMIT="$(git rev-parse HEAD)" \
+#     -f Dockerfile.release -t ctf-agent-ctfy:tpctf-20261113 .
+
+ARG BASE_IMAGE=ctf-agent-ctfy:v3
+FROM ${BASE_IMAGE}
+
+ARG SOURCE_COMMIT=unknown
+ARG PIP_INDEX_URL=https://pypi.org/simple
+
+USER root
+
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends foremost libgmp10 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /app/requirements.txt
+RUN PIP_INDEX_URL="${PIP_INDEX_URL}" pip install --no-cache-dir -r /app/requirements.txt
+
+COPY src/agent/ /app/
+COPY src/runtime/pi/ /app/runtime/pi/
+COPY src/skills/ /skills/
+COPY knowledge-base/ /knowledge-base/
+COPY ctfy_entrypoint.py /app/ctfy_entrypoint.py
+
+RUN mkdir -p /app/cases /app/logs \
+    && chown -R ctfy:ctfy /app /home/ctfy
+
+LABEL org.opencontainers.image.title="CTF-Agent-CTFy" \
+      org.opencontainers.image.version="tpctf-20261113" \
+      org.opencontainers.image.revision="${SOURCE_COMMIT}" \
+      io.ctf-agent.base-image-id="sha256:fd47e4fde6b7a7ce30f0263635758e359eef612818406561490b2d198982830b" \
+      io.ctf-agent.startup-contract="ctfy-0001-cwd-v2"
+
+USER 1000
+WORKDIR /app
+ENTRYPOINT ["python3", "/app/ctfy_entrypoint.py"]

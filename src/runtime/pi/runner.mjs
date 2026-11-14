@@ -228,7 +228,7 @@ async function start(value) {
     initialState: { model: configured.model, thinkingLevel: 'off', systemPrompt: config.instruction, tools: tools() },
     toolExecution: 'sequential', getApiKey: () => configured.apiKey,
     transformContext: async messages => recentContext(messages),
-    prepareNextTurn: () => ({ context: { systemPrompt: config.instruction, messages: agent.state.messages, tools: tools() } }),
+    prepareNextTurn: () => ({ context: { systemPrompt: config.instruction, messages: agent.state.messages.slice(), tools: tools() } }),
     onPayload: payload => {
       payload.temperature = 0.1;
       payload.max_tokens = config.max_tokens;

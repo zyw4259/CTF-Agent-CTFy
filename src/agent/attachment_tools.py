@@ -699,6 +699,8 @@ def execute(case_id,action,file='',args=None,allow_execution=False,allow_symbol_
             return local_binary.objdump(path, args)
         if action == 'local_r2':
             return local_binary.radare(path)
+        if not allow_execution:
+            raise ValueError('未启用隔离运行上传程序')
         return local_binary.gdb_run(path, args)
     if action in {'web_request','web_discover','sqlmap'}:
         if not target_url:
