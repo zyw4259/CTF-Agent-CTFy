@@ -26,14 +26,12 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
 COPY requirements.txt /app/requirements.txt
 RUN PIP_INDEX_URL="${PIP_INDEX_URL}" pip install --no-cache-dir -r /app/requirements.txt
 
-COPY src/agent/ /app/
-COPY src/runtime/pi/ /app/runtime/pi/
-COPY src/skills/ /skills/
-COPY knowledge-base/ /knowledge-base/
-COPY ctfy_entrypoint.py /app/ctfy_entrypoint.py
+COPY --chown=1000:1000 src/agent/*.py /app/
+COPY --chown=1000:1000 src/runtime/pi/runner.mjs /app/runtime/pi/runner.mjs
+COPY --chown=1000:1000 ctfy_entrypoint.py /app/ctfy_entrypoint.py
 
 RUN mkdir -p /app/cases /app/logs \
-    && chown -R ctfy:ctfy /app /home/ctfy
+    && chown ctfy:ctfy /app/cases /app/logs
 
 LABEL org.opencontainers.image.title="CTF-Agent-CTFy" \
       org.opencontainers.image.version="tpctf-20261113" \
